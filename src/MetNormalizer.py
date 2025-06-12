@@ -57,6 +57,17 @@ class MetNorm:
         self.param_grid = {'kernel': ['rbf', 'linear','poly'],'C': [0.1, 1, 10, 100],'gamma': ['scale','auto', 0.01, 0.1, 1],'epsilon': [0.01, 0.1, 0.5]}
         
     def _top_correlated(self,n=5,method='spearman'):
+        """
+        Calculate features with the highest correlation for each signal 
+        (these will act as features to predict signal intensity)
+        
+        Parameters
+        ----------
+        n : int 
+            - number of features to keep 
+        method : str
+            - method to compute correlation matrix 
+        """
         QC = self.QC.copy()
         signals = QC.columns.tolist()
         QC_ranked = np.apply_along_axis(rankdata,axis=0,arr=QC)
@@ -69,6 +80,18 @@ class MetNorm:
             signal_dict[signal] = df.index.tolist()[:n]
         self.sorted_signals = signal_dict
     def _fit(self,signal,corr):
+        """"
+        Fit the support vector regression model 
+        using the top_correlated features as input data
+
+        Parameters 
+        ----------
+        signal: str
+            - signal name or position
+        corr: list
+            - top correlated features corresponding to that signal
+
+        """
         self.scaler_X = StandardScaler()
         self.scaler_y = StandardScaler()
         X_train = self.QC.loc[:,corr].to_numpy()
@@ -92,15 +115,48 @@ class MetNorm:
         self.X_test = X_test
         self.X_train = X_train
     def _predict(self):
+        """
+        Estimate signal intensities for QC and Biological samples, 
+        return predictions back to original scale
+
+        Returns
+        -------
+        None 
+
+        """
         QC_pred = self.model.predict(self.X_train)
         sample_pred = self.model.predict(self.X_test)
         self.QC_pred = self.scaler_y.inverse_transform(QC_pred.reshape(-1,1))
         self.sample_pred = self.scaler_y.inverse_transform(sample_pred.reshape(-1,1))
     def _normalize_signals(self,signal):
+        """
+        Normalize QC and Biological samples' original values by corresponding predictions 
+        Parameters
+        ------
+        signal: str
+        - signal position or name
+        
+        Returns 
+        -------
+        
+        QC_norm : np.ndarray
+            - normalized QC values  
+        sample_norm : np.ndarray
+            - normalized Biological sample values 
+        """
         QC_norm = (self.QC.loc[:,signal] / self.QC_pred.ravel()).to_numpy()
         sample_norm = (self.sample.loc[:,signal] / self.sample_pred.ravel()).to_numpy()
         return QC_norm,sample_norm
     def fit_transform(self):
+        """
+        Calls all helper functions to normalize data
+
+        Returns
+        ------
+        
+        normed: pd.DataFrame
+            - returns normalized QC and Biologcial Samples
+        """
         qc_list = []
         sample_list = []
         self._top_correlated(method='spearman')
