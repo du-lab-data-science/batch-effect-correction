@@ -53,7 +53,7 @@ class MetNorm:
         self.sample_signal_idx = None
         self.normed = None
         self.cv = cv
-        self.model = model if model is not None else SVR()
+        self.model = model if model is not None else None
         self.param_grid = {'kernel': ['rbf', 'linear','poly'],'C': [0.1, 1, 10, 100],'gamma': ['scale','auto', 0.01, 0.1, 1],'epsilon': [0.01, 0.1, 0.5]}
         
     def _top_correlated(self,n=5,method='spearman'):
@@ -94,24 +94,30 @@ class MetNorm:
         """
         self.scaler_X = StandardScaler()
         self.scaler_y = StandardScaler()
-        X_train = self.QC.loc[:,corr].to_numpy()
+        
+        # Prepare training data
+        X_train = self.QC.loc[:, corr].to_numpy()
         X_train = self.scaler_X.fit_transform(X_train)
 
-        y_train = self.QC.loc[:,signal].to_numpy()
-        y_train = y_train.reshape(-1,1)
+        y_train = self.QC.loc[:, signal].to_numpy().reshape(-1, 1)
         y_train = self.scaler_y.fit_transform(y_train).ravel()
-        CV = self.cv
-        if CV:
+
+        X_test = self.sample.loc[:, corr].to_numpy()
+        X_test = self.scaler_X.transform(X_test)
+        
+        if self.cv:
             svr = SVR()
             grid_search = GridSearchCV(svr,self.param_grid,cv=5,scoring = 'r2',n_jobs=-1)
             grid_search.fit(X_train,y_train)
             self.model = grid_search.best_estimator_
             self.best_params = grid_search.best_params_
             self.best_score = grid_search.best_score_
+        else:
+            self.model = SVR(gamma='auto',tol=0.001,epsilon=0.1,coef0=0,C=1.0)
+            X_test = self.sample.loc[:,corr]
+            X_test = self.scaler_X.transform(X_test)
+            self.model.fit(X_train,y_train)
 
-        X_test = self.sample.loc[:,corr]
-        X_test = self.scaler_X.transform(X_test)
-        self.model.fit(X_train,y_train)
         self.X_test = X_test
         self.X_train = X_train
     def _predict(self):
@@ -169,4 +175,5 @@ class MetNorm:
         self.QC_normed = pd.concat(qc_list,axis=1)
         self.sample_normed = pd.concat(sample_list,axis=1)
         self.normed = pd.concat([self.QC_normed,self.sample_normed],axis=0)
+        self.normed *= self.QC.median()
         return self.normed
