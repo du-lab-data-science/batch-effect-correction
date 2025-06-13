@@ -54,7 +54,7 @@ class MetNorm:
         self.normed = None
         self.cv = cv
         self.model = model if model is not None else None
-        self.param_grid = {'kernel': ['rbf', 'linear','poly'],'C': [0.1, 1, 10, 100],'gamma': ['scale','auto', 0.01, 0.1, 1],'epsilon': [0.01, 0.1, 0.5]}
+        self.param_grid = {'kernel': ['rbf'],'C': [0.1, 1, 10, 100],'gamma': ['auto', 0.01, 0.1, 1],'epsilon': [0.01, 0.1, 0.5]}
         
     def _top_correlated(self,n=5,method='spearman'):
         """
@@ -114,8 +114,6 @@ class MetNorm:
             self.best_score = grid_search.best_score_
         else:
             self.model = SVR(gamma='auto',tol=0.001,epsilon=0.1,coef0=0,C=1.0)
-            X_test = self.sample.loc[:,corr]
-            X_test = self.scaler_X.transform(X_test)
             self.model.fit(X_train,y_train)
 
         self.X_test = X_test
@@ -131,7 +129,16 @@ class MetNorm:
 
         """
         QC_pred = self.model.predict(self.X_train)
+
+        QC_pred[QC_pred < 0] = 0
+        QC_pred[np.isinf(QC_pred)] = 0
+        QC_pred[np.isnan(QC_pred)] = 0
+
         sample_pred = self.model.predict(self.X_test)
+        sample_pred[sample_pred < 0] = 0
+        sample_pred[np.isinf(sample_pred)] = 0
+        sample_pred[np.isnan(sample_pred)] = 0
+        
         self.QC_pred = self.scaler_y.inverse_transform(QC_pred.reshape(-1,1))
         self.sample_pred = self.scaler_y.inverse_transform(sample_pred.reshape(-1,1))
     def _normalize_signals(self,signal):
